@@ -22,7 +22,7 @@ The Chat-Leser turns that file back into conversations.
 | Read | One conversation at a time, grouped by day, with the option to jump to a single day or choose a period |
 | Keep | The chosen period as a Markdown file or copied to the clipboard, word for word, optionally with the reasoning trace where the export contains one |
 
-Tested with the Claude export (October 2026) and the ChatGPT export format. Claude Code sessions are not part of
+Tested with a real Claude export (October 2026). The ChatGPT export format is supported as documented, but has so far only been tested with a sample file. Claude Code sessions are not part of
 Anthropic's data export; the reader can still open Claude Code session files (JSONL) if you have them.
 
 ## Privacy
