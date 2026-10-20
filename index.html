@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Chat-Leser</title>
+<style>
+/* Layout: Liste der Chats links, Lesefläche rechts; am Handy nacheinander. Farben aus dem Logbuch: Nachtblau und Gold. */
+:root {
+  --grund: #eef0f6; --flaeche: #ffffff; --flaeche2: #e3e7f1; --linie: #cfd5e4;
+  --tinte: #1a2242; --leise: #5c6385; --gold: #96701c; --gold-flaeche: #f3ead3; --auf-gold: #ffffff;
+  --du: #e6ebf7; --warn: #a2501f;
+  --lese: "Literata", Georgia, "Times New Roman", serif;
+  --ui: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grund: #0c1530; --flaeche: #142044; --flaeche2: #1b2a57; --linie: #2b3b70;
+    --tinte: #f1e6df; --leise: #a6a7c4; --gold: #d8b25e; --gold-flaeche: #2c2a3c; --auf-gold: #1a1404;
+    --du: #1d2b5a; --warn: #e6a26b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --grund: #0c1530; --flaeche: #142044; --flaeche2: #1b2a57; --linie: #2b3b70;
+  --tinte: #f1e6df; --leise: #a6a7c4; --gold: #d8b25e; --gold-flaeche: #2c2a3c; --auf-gold: #1a1404;
+  --du: #1d2b5a; --warn: #e6a26b; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--grund); color: var(--tinte); font: 16px/1.5 var(--ui); }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+.rahmen { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; height: 100%; }
+.seite { min-width: 0; overflow-y: auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.seite.liste { border-right: 1px solid var(--linie); background: var(--grund); }
+.seite.leser { background: var(--flaeche); }
+@media (max-width: 760px) {
+  .rahmen { grid-template-columns: 1fr; }
+  .rahmen.lesen .liste { display: none; }
+  .rahmen:not(.lesen) .leser { display: none; }
+  .seite.liste { border-right: 0; }
+}
+h1 { font: 600 26px/1.2 var(--lese); margin: 0; text-wrap: balance; }
+h2 { font: 600 22px/1.25 var(--lese); margin: 0; text-wrap: balance; }
+.kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.klein { font-size: 13px; color: var(--leise); }
+.etikett { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--leise); font-weight: 600; }
+.knopf { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--gold); background: var(--gold); color: var(--auf-gold); font-weight: 600; cursor: pointer; }
+.knopf.leise { background: transparent; color: var(--tinte); border-color: var(--linie); }
+.knopf:disabled { opacity: .45; cursor: default; }
+.knopf:focus-visible, input:focus-visible, select:focus-visible, .eintrag:focus-visible, .tag:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.stapel { display: flex; flex-direction: column; gap: 12px; }
+.reihe { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.laden { border: 1.5px dashed var(--linie); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: var(--flaeche); }
+.laden.drueber { border-color: var(--gold); background: var(--gold-flaeche); }
+.balken { height: 6px; border-radius: 3px; background: var(--flaeche2); overflow: hidden; }
+.balken i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .2s; }
+.hinweis { padding: 10px 12px; border-radius: 10px; background: var(--gold-flaeche); font-size: 14px; }
+input[type="search"], input[type="text"], input[type="date"], select { width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--linie); background: var(--flaeche); }
+.sortierung { display: flex; gap: 6px; }
+.sortierung button { flex: 1; min-height: 36px; border-radius: 8px; border: 1px solid var(--linie); background: transparent; cursor: pointer; font-size: 14px; }
+.sortierung button[aria-pressed="true"] { background: var(--tinte); color: var(--grund); border-color: var(--tinte); }
+.eintraege { display: flex; flex-direction: column; gap: 6px; }
+.eintrag { text-align: left; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; background: transparent; cursor: pointer; display: grid; gap: 2px; }
+.eintrag:hover { background: var(--flaeche); }
+.eintrag[aria-current="true"] { background: var(--flaeche); border-color: var(--gold); }
+.eintrag b { font: 600 16px/1.3 var(--lese); overflow-wrap: anywhere; }
+.eintrag .zahlen { font-size: 13px; color: var(--leise); font-variant-numeric: tabular-nums; }
+.eintrag .vorschau { font-size: 13px; color: var(--leise); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+mark { background: var(--gold-flaeche); color: inherit; border-bottom: 2px solid var(--gold); }
+.zurueck { display: none; }
+@media (max-width: 760px) { .zurueck { display: inline-flex; } }
+.leer { color: var(--leise); text-align: center; padding: 60px 16px; font-family: var(--lese); font-size: 18px; }
+.tage { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.tag { flex: none; border: 1px solid var(--linie); border-radius: 999px; padding: 4px 10px; font-size: 13px; background: transparent; cursor: pointer; font-variant-numeric: tabular-nums; }
+.tag[aria-pressed="true"] { background: var(--gold); color: var(--auf-gold); border-color: var(--gold); }
+details.freigabe { border: 1px solid var(--linie); border-radius: 12px; padding: 12px 14px; }
+details.freigabe summary { cursor: pointer; font-weight: 600; }
+.felder { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.felder label { display: grid; gap: 4px; font-size: 13px; color: var(--leise); }
+.verlauf { display: flex; flex-direction: column; gap: 18px; max-width: 46rem; }
+.tagkopf { font: 600 13px var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--linie); padding-bottom: 6px; margin-top: 10px; }
+.nachricht { display: grid; gap: 6px; min-width: 0; }
+.nachricht .wer { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--leise); font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.nachricht .wer time { letter-spacing: 0; text-transform: none; font-weight: 400; font-variant-numeric: tabular-nums; }
+.nachricht .text { font: 17px/1.6 var(--lese); white-space: pre-wrap; overflow-wrap: anywhere; }
+.nachricht.du .text { background: var(--du); border-radius: 12px; padding: 10px 14px; }
+.denkspur { border-left: 2px dotted var(--leise); padding: 4px 0 4px 12px; font: italic 15px/1.55 var(--lese); color: var(--leise); white-space: pre-wrap; overflow-wrap: anywhere; }
+.beigabe { font-size: 13px; color: var(--leise); }
+.leiste { background: var(--flaeche); padding: 10px 0; border-bottom: 1px solid var(--linie); display: flex; flex-direction: column; gap: 10px; }
+[hidden] { display: none !important; }
+.meldung { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--tinte); color: var(--grund); padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); z-index: 9; font-size: 14px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="rahmen" id="rahmen">
+  <section class="seite liste" aria-label="Alle Chats">
+    <div class="stapel">
+      <div class="kopf"><h1>Chat-Leser</h1><span class="klein" id="bestand"></span></div>
+      <div class="laden" id="laden">
+        <span class="etikett">Export öffnen</span>
+        <span class="klein">Die Datei <b>conversations-000.zip</b> aus dem Claude-Export hierher ziehen oder auswählen, oder den ChatGPT-Export (ZIP mit <b>conversations.json</b>). Jede weitere Datei kommt hinzu. Gelesen wird nur in diesem Browser, nichts wird hochgeladen.</span>
+        <div class="reihe">
+          <label class="knopf" for="datei">Datei wählen</label>
+          <input type="file" id="datei" accept=".zip,.json,.jsonl,application/zip,application/json" multiple hidden>
+          <button class="knopf leise" id="vergessen" type="button" hidden>Kopie in diesem Browser löschen</button>
+        </div>
+        <div class="balken" id="balken" hidden><i></i></div>
+        <span class="klein" id="ladestand"></span>
+      </div>
+      <p class="hinweis" id="beispielhinweis">Zu sehen ist ein <b>erfundenes Beispiel</b>. Sobald du deinen Export öffnest, erscheinen hier deine Chats.</p>
+      <input type="search" id="suche" placeholder="In Titeln und Anfängen suchen …" autocomplete="off">
+      <div class="reihe" style="justify-content: space-between">
+        <div class="sortierung" role="group" aria-label="Sortieren">
+          <button type="button" data-sort="beginn" aria-pressed="true">Beginn</button>
+          <button type="button" data-sort="zuletzt" aria-pressed="false">Zuletzt aktiv</button>
+          <button type="button" data-sort="laenge" aria-pressed="false">Länge</button>
+        </div>
+        <button class="knopf leise" id="volltext" type="button" title="Durchsucht alle Nachrichten. Dauert bei großen Exporten einen Moment.">Volltext</button>
+      </div>
+      <div class="eintraege" id="eintraege"></div>
+    </div>
+  </section>
+
+  <section class="seite leser" aria-label="Chat lesen" id="leser">
+    <p class="leer">Links einen Chat antippen.</p>
+  </section>
+</div>
+<div class="meldung" id="meldung" hidden></div>
+
+<script src="fflate.min.js"></script>
+<script>
+"use strict";
+
+// ------------------------------------------------------------ kleine Helfer
+const $ = (s) => document.querySelector(s);
+function el(tag, attrs = {}, ...kinder) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kinder.flat()) if (k !== null && k !== undefined && k !== false) e.append(k);
+  return e;
+}
+let meldungZeit;
+function melden(text) {
+  const m = $("#meldung");
+  m.textContent = text;
+  m.hidden = false;
+  clearTimeout(meldungZeit);
+  meldungZeit = setTimeout(() => (m.hidden = true), 4200);
+}
+const fmtTag = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "2-digit" });
+const fmtTagLang = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const fmtZeit = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+function tagSchluessel(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "unbekannt";
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+const kurzTag = (iso) => { const d = new Date(iso); return isNaN(d) ? "–" : fmtTag.format(d); };
+const zahl = (n) => n.toLocaleString("de-DE");
+
+// ------------------------------------------------------------ Speicher im Browser (nur dieses Gerät)
+const DB_NAME = "chatleser", DB_VERSION = 1;
+let dbVersprechen = null;
+function db() {
+  if (!dbVersprechen) dbVersprechen = new Promise((ok, nein) => {
+    let r;
+    try { r = indexedDB.open(DB_NAME, DB_VERSION); } catch (e) { nein(e); return; }
+    r.onupgradeneeded = () => { r.result.createObjectStore("chats", { keyPath: "id" }); r.result.createObjectStore("meta"); };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => nein(r.error);
+  });
+  return dbVersprechen;
+}
+async function dbTun(store, modus, arbeit) {
+  const d = await db();
+  return new Promise((ok, nein) => {
+    const t = d.transaction(store, modus);
+    const ergebnis = arbeit(t.objectStore(store));
+    t.oncomplete = () => ok(ergebnis && "result" in ergebnis ? ergebnis.result : ergebnis);
+    t.onerror = () => nein(t.error);
+    t.onabort = () => nein(t.error);
+  });
+}
+
+// ------------------------------------------------------------ Chats vereinheitlichen
+// Der Export ändert sich ab und zu; hier wird alles in eine feste Form gebracht.
+function blockText(b) {
+  if (!b || typeof b !== "object") return "";
+  if (typeof b.text === "string") return b.text;
+  if (Array.isArray(b.content)) return b.content.map(blockText).join("\n");
+  return "";
+}
+function nachrichtFormen(m) {
+  const wer = (m.sender || m.role || "").toLowerCase();
+  const du = wer === "human" || wer === "user";
+  let text = "", denk = [], werkzeuge = [], dateien = [];
+  if (Array.isArray(m.content) && m.content.length) {
+    const teile = [];
+    for (const b of m.content) {
+      if (!b) continue;
+      if (b.type === "text") teile.push(b.text || "");
+      else if (b.type === "thinking" || b.type === "redacted_thinking") { if (b.thinking) denk.push(b.thinking); }
+      else if (b.type === "tool_use") werkzeuge.push(b.name || "Werkzeug");
+    }
+    text = teile.join("\n\n").trim();
+  }
+  if (!text && typeof m.text === "string") text = m.text.trim();
+  for (const a of [].concat(m.attachments || [], m.files || [], m.files_v2 || [])) {
+    const n = a && (a.file_name || a.name || a.filename);
+    if (n && !dateien.includes(n)) dateien.push(n);
+  }
+  return { du, t: m.created_at || m.create_time || m.timestamp || "", text, denk: denk.join("\n\n").trim(), werkzeuge, dateien };
+}
+// ChatGPT-Export: Nachrichten liegen als Baum in „mapping“; gelesen wird der sichtbare Zweig bis current_node
+function chatgptZuClaude(c) {
+  const m = c.mapping || {};
+  const kette = [];
+  let id = c.current_node;
+  if (!id || !m[id]) id = Object.keys(m).find((k) => m[k] && (!m[k].children || !m[k].children.length));
+  const gesehen = new Set();
+  while (id && m[id] && !gesehen.has(id)) { gesehen.add(id); kette.unshift(m[id]); id = m[id].parent; }
+  const zeit = (s) => (typeof s === "number" ? new Date(s * 1000).toISOString() : s || "");
+  const nachrichten = [];
+  for (const k of kette) {
+    const msg = k.message;
+    if (!msg || !msg.author) continue;
+    const rolle = msg.author.role;
+    if (rolle !== "user" && rolle !== "assistant") continue;
+    if (msg.metadata && msg.metadata.is_visually_hidden_from_conversation) continue;
+    const inhalt = msg.content || {};
+    let text = "", denk = "";
+    if (Array.isArray(inhalt.parts)) text = inhalt.parts.filter((x) => typeof x === "string").join("\n\n");
+    else if (typeof inhalt.text === "string") text = inhalt.text;
+    if (inhalt.content_type === "thoughts" && Array.isArray(inhalt.thoughts)) { denk = inhalt.thoughts.map((t) => t.content || t.summary || "").join("\n\n"); text = ""; }
+    if (inhalt.content_type === "reasoning_recap") continue;
+    if (!text.trim() && !denk.trim()) continue;
+    nachrichten.push({ sender: rolle === "user" ? "human" : "assistant", created_at: zeit(msg.create_time),
+      content: [denk ? { type: "thinking", thinking: denk } : null, text ? { type: "text", text } : null].filter(Boolean) });
+  }
+  return { assistent: "ChatGPT", uuid: "gpt-" + (c.conversation_id || c.id || c.title), name: c.title, created_at: zeit(c.create_time), updated_at: zeit(c.update_time), chat_messages: nachrichten };
+}
+
+function chatFormen(c) {
+  const roh = c.chat_messages || c.messages || [];
+  const nachrichten = roh.map(nachrichtFormen).filter((n) => n.text || n.denk || n.dateien.length || n.werkzeuge.length);
+  nachrichten.sort((a, b) => String(a.t).localeCompare(String(b.t)));
+  const zeiten = nachrichten.map((n) => n.t).filter(Boolean);
+  const beginn = c.created_at || zeiten[0] || "";
+  const zuletzt = zeiten[zeiten.length - 1] || c.updated_at || beginn;
+  const erste = nachrichten.find((n) => n.du && n.text);
+  return {
+    id: c.uuid || c.id || ("c-" + Math.random().toString(36).slice(2)),
+    titel: (c.name || c.title || "").trim() || "Ohne Titel",
+    assistent: c.assistent || "Claude",
+    beginn, zuletzt, nachrichten,
+    anzahl: nachrichten.length,
+    tage: [...new Set(nachrichten.map((n) => tagSchluessel(n.t)))],
+    vorschau: erste ? erste.text.slice(0, 200) : "",
+    denkspur: nachrichten.some((n) => n.denk)
+  };
+}
+const indexEintrag = (c) => ({ id: c.id, titel: c.titel, beginn: c.beginn, zuletzt: c.zuletzt, anzahl: c.anzahl, tage: c.tage.length, vorschau: c.vorschau, denkspur: c.denkspur });
+
+// ------------------------------------------------------------ JSON stückweise lesen
+// Liest eine Liste von Chats ([{…},{…}]) Zeichen für Zeichen und gibt jeden Chat einzeln heraus,
+// damit auch ein Export von mehreren hundert MB nicht auf einmal in den Speicher muss.
+class JsonStrom {
+  constructor(beiObjekt) {
+    this.beiObjekt = beiObjekt; this.tiefe = 0; this.inText = false; this.esc = false;
+    this.teile = []; this.start = -1; this.oben = null; this.ganz = [];
+  }
+  schieben(s) {
+    if (this.oben === "objekt") { this.ganz.push(s); return; }
+    let start = this.start >= 0 ? 0 : -1;
+    for (let i = 0; i < s.length; i++) {
+      const z = s.charCodeAt(i);
+      if (this.inText) {
+        if (this.esc) this.esc = false;
+        else if (z === 92) this.esc = true;
+        else if (z === 34) this.inText = false;
+        continue;
+      }
+      if (z === 34) { this.inText = true; continue; }
+      if (this.oben === null && (z === 91 || z === 123)) {
+        if (z === 123) { this.oben = "objekt"; this.ganz.push(s.slice(i)); return; }
+        this.oben = "liste"; this.tiefe = 1; continue;
+      }
+      if (z === 123 || z === 91) {
+        this.tiefe++;
+        if (this.tiefe === 2 && z === 123) { start = i; this.start = 0; this.teile = []; }
+      } else if (z === 125 || z === 93) {
+        this.tiefe--;
+        if (this.tiefe === 1 && z === 125 && this.start >= 0) {
+          this.teile.push(s.slice(start, i + 1));
+          const text = this.teile.join("");
+          this.teile = []; this.start = -1; start = -1;
+          try { this.beiObjekt(JSON.parse(text)); } catch (e) { this.fehler = (this.fehler || 0) + 1; }
+        }
+      }
+    }
+    if (this.start >= 0 && start >= 0) this.teile.push(s.slice(start));
+  }
+  ende() {
+    if (this.oben === "objekt") {
+      try {
+        const o = JSON.parse(this.ganz.join(""));
+        if (Array.isArray(o.conversations)) o.conversations.forEach(this.beiObjekt);
+        else this.beiObjekt(o);
+      } catch (e) { this.fehler = (this.fehler || 0) + 1; }
+    }
+  }
+}
+
+// ------------------------------------------------------------ Export einlesen
+let INDEX = [];          // alle Chats ohne Nachrichten (für die Liste)
+let BEISPIEL = true;
+const CACHE = new Map(); // geöffnete Chats
+
+// Claude-Code-Sitzungen: eine Zeile pro Ereignis, gruppiert nach Sitzung
+function ohneHausnotizen(t) {
+  return String(t || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+}
+class SitzungsSammler {
+  constructor() { this.sitzungen = new Map(); }
+  zeile(o) {
+    if (!o || typeof o !== "object" || o.isSidechain || o.isMeta) return;
+    if (o.type !== "user" && o.type !== "assistant") return;
+    const m = o.message; if (!m) return;
+    const id = o.sessionId || "ohne-sitzung";
+    if (!this.sitzungen.has(id)) this.sitzungen.set(id, { nachrichten: [], titel: "" });
+    const s = this.sitzungen.get(id);
+    const t = o.timestamp || "";
+    if (o.type === "user") {
+      let text = "";
+      if (typeof m.content === "string") text = m.content;
+      else if (Array.isArray(m.content)) {
+        if (m.content.some((b) => b && b.type === "tool_result")) return; // Werkzeug-Ergebnis, keine Nachricht von dir
+        text = m.content.filter((b) => b && b.type === "text").map((b) => b.text).join("\n\n");
+      }
+      text = ohneHausnotizen(text);
+      if (!text || /^<(command-|local-command|bash-|task-notification)/.test(text)) return;
+      s.nachrichten.push({ du: true, t, text, denk: "", werkzeuge: [], dateien: [] });
+      if (!s.titel) s.titel = text.split("\n")[0].slice(0, 70);
+      return;
+    }
+    const bl = Array.isArray(m.content) ? m.content : [];
+    const text = bl.filter((b) => b && b.type === "text").map((b) => b.text).join("\n\n").trim();
+    const denk = bl.filter((b) => b && b.type === "thinking").map((b) => b.thinking || "").join("\n\n").trim();
+    const werkzeuge = bl.filter((b) => b && b.type === "tool_use").map((b) => b.name || "Werkzeug");
+    if (!text && !denk && !werkzeuge.length) return;
+    const letzte = s.nachrichten[s.nachrichten.length - 1];
+    // Eine Antwort kommt in mehreren Teilen; aufeinanderfolgende Teile werden eine Nachricht
+    if (letzte && !letzte.du) {
+      if (text) letzte.text = letzte.text ? letzte.text + "\n\n" + text : text;
+      if (denk) letzte.denk = letzte.denk ? letzte.denk + "\n\n" + denk : denk;
+      letzte.werkzeuge.push(...werkzeuge);
+    } else s.nachrichten.push({ du: false, t, text, denk, werkzeuge, dateien: [] });
+  }
+  chats() {
+    const liste = [];
+    for (const [id, s] of this.sitzungen) {
+      const n = s.nachrichten.filter((x) => x.text || x.denk);
+      if (!n.length) continue;
+      n.sort((a, b) => String(a.t).localeCompare(String(b.t)));
+      const erste = n.find((x) => x.du && x.text);
+      liste.push({ id: "cc-" + id, titel: "Claude Code: " + (s.titel || "Sitzung"), beginn: n[0].t, zuletzt: n[n.length - 1].t,
+        nachrichten: n, anzahl: n.length, tage: [...new Set(n.map((x) => tagSchluessel(x.t)))],
+        vorschau: erste ? erste.text.slice(0, 200) : "", denkspur: n.some((x) => x.denk) });
+    }
+    return liste;
+  }
+}
+class ZeilenStrom {
+  constructor(beiZeile) { this.beiZeile = beiZeile; this.rest = ""; }
+  schieben(s) {
+    const teile = (this.rest + s).split("\n");
+    this.rest = teile.pop();
+    for (const z of teile) if (z.trim()) { try { this.beiZeile(JSON.parse(z)); } catch (e) {} }
+  }
+  ende() { if (this.rest.trim()) { try { this.beiZeile(JSON.parse(this.rest)); } catch (e) {} } this.rest = ""; }
+}
+
+// Jede weitere Datei kommt dazu; nichts Bisheriges wird beim Öffnen gelöscht.
+async function exportLesen(datei) {
+  const balken = $("#balken"), stand = $("#ladestand");
+  balken.hidden = false;
+  stand.textContent = "Wird gelesen …";
+  const neu = [], dateinamen = [];
+  const sammler = new SitzungsSammler();
+  let speicherVoll = KEINSPEICHER, gelesen = 0, puffer = [];
+
+  const ablegen = async () => {
+    if (!puffer.length) return;
+    const stapel = puffer; puffer = [];
+    if (!speicherVoll) {
+      try { await dbTun("chats", "readwrite", (s) => { stapel.forEach((c) => s.put(c)); }); return; }
+      catch (e) { speicherVoll = true; }
+    }
+    stapel.forEach((c) => FLUECHTIG.set(c.id, c));
+  };
+  const chatDazu = (c) => { neu.push(indexEintrag(c)); puffer.push(c); };
+  const skizzen = [];
+  let entpackFehler = "";
+  // Sucht in jeder Form nach Chats (chat_messages) oder Sitzungs-Ereignissen (user/assistant mit Nachricht)
+  const beiChat = (roh, sitzung = null, tiefe = 0) => {
+    if (!roh || typeof roh !== "object" || tiefe > 6) return;
+    if (Array.isArray(roh)) { roh.forEach((x) => beiChat(x, sitzung, tiefe + 1)); return; }
+    if (Array.isArray(roh.chat_messages)) { chatDazu(chatFormen(roh)); return; }
+    if (roh.mapping && typeof roh.mapping === "object" && ("current_node" in roh || "create_time" in roh)) { chatDazu(chatFormen(chatgptZuClaude(roh))); return; }
+    const art = roh.type || roh.role;
+    if ((art === "user" || art === "assistant" || art === "human") && (roh.message || roh.content !== undefined)) {
+      const m = roh.message || { role: roh.role || art, content: roh.content };
+      sammler.zeile({ ...roh, type: art === "human" ? "user" : (art === "assistant" ? "assistant" : "user"), message: m,
+        sessionId: roh.sessionId || roh.session_id || sitzung || "sitzung", timestamp: roh.timestamp || roh.created_at || roh.createdAt || "" });
+      return;
+    }
+    const eigene = roh.sessionId || roh.session_id || roh.uuid || roh.id || sitzung;
+    let gefunden = false;
+    for (const [k, v] of Object.entries(roh)) {
+      if (v && typeof v === "object") { gefunden = true; beiChat(v, typeof eigene === "string" ? eigene : sitzung, tiefe + 1); }
+    }
+    if (tiefe === 0 && skizzen.length < 6) skizzen.push(aufbau(roh));
+  };
+  // Nur die Namen der Felder, kein Inhalt
+  const aufbau = (o, t = 0) => {
+    if (Array.isArray(o)) return "[" + (o.length ? aufbau(o[0], t + 1) : "") + "]";
+    if (o && typeof o === "object") return t > 2 ? "{…}" : "{" + Object.keys(o).slice(0, 12).map((k) => k + (o[k] && typeof o[k] === "object" ? ":" + aufbau(o[k], t + 1) : "")).join(", ") + "}";
+    return "";
+  };
+  const stromFuer = (name) => /\.jsonl$/i.test(name) ? new ZeilenStrom(beiChat) : new JsonStrom(beiChat);
+  const istZip = /\.zip$/i.test(datei.name) || datei.type.includes("zip");
+  let ziel;
+  if (istZip) {
+    if (typeof fflate === "undefined") { stand.textContent = "Das Entpack-Werkzeug konnte nicht geladen werden. Bitte die Seite neu laden."; balken.hidden = true; return; }
+    const unzip = new fflate.Unzip((f) => {
+      dateinamen.push(f.name);
+      if (!/\.jsonl?$/i.test(f.name)) return;
+      const strom = stromFuer(f.name), dec = new TextDecoder();
+      f.ondata = (err, stueck, letztes) => {
+        if (err) { entpackFehler = err.message; return; }
+        strom.schieben(dec.decode(stueck, { stream: !letztes }));
+        if (letztes) strom.ende();
+      };
+      try { f.start(); } catch (e) { entpackFehler = (e && e.message) || String(e); }
+    });
+    unzip.register(fflate.UnzipInflate);
+    ziel = (stueck, letztes) => unzip.push(stueck, letztes);
+  } else {
+    dateinamen.push(datei.name);
+    const strom = stromFuer(datei.name), dec = new TextDecoder();
+    ziel = (stueck, letztes) => { strom.schieben(dec.decode(stueck, { stream: !letztes })); if (letztes) strom.ende(); };
+  }
+
+  const leser = datei.stream().getReader();
+  try {
+  for (;;) {
+    const { done, value } = await leser.read();
+    if (done) { ziel(new Uint8Array(0), true); break; }
+    ziel(value, false);
+    gelesen += value.length;
+    balken.firstElementChild.style.width = (100 * gelesen / datei.size).toFixed(1) + "%";
+    stand.textContent = `${(gelesen / 1048576).toFixed(0)} von ${(datei.size / 1048576).toFixed(0)} MB · ${zahl(neu.length + sammler.sitzungen.size)} Chats gefunden`;
+    if (puffer.length >= 20) await ablegen();
+  }
+  } catch (e) {
+    balken.hidden = true;
+    const ordner = /network|NotFound|NotReadable/i.test(String(e && (e.name + e.message)));
+    stand.textContent = (ordner ? "Das sieht nach einem Ordner aus, nicht nach einer Datei. Bitte den Ordner ins Feld ziehen (nicht über „Datei wählen“) oder die Dateien darin auswählen. " :
+      "Beim Lesen ist etwas schiefgegangen: " + (e && e.message || e) + ". ") + "Deine bisherigen Chats sind unverändert da. Enthaltene Dateien: " +
+      (dateinamen.slice(0, 12).join(", ") || "keine") + ". Ein Screenshot davon hilft beim Nachbessern.";
+    return;
+  }
+  sammler.chats().forEach(chatDazu);
+  await ablegen();
+  balken.hidden = true;
+
+  if (!neu.length) {
+    stand.textContent = "In dieser Datei wurden keine Chats erkannt. Deine bisherigen Chats sind unverändert da. " +
+      (entpackFehler ? "Entpacken: " + entpackFehler + ". " : "") + "Enthaltene Dateien: " +
+      (dateinamen.slice(0, 12).join(", ") || "keine") + (skizzen.length ? ". Aufbau (nur Feldnamen): " + skizzen.join(" | ").slice(0, 600) : "") +
+      ". Ein Screenshot davon hilft beim Nachbessern.";
+    return;
+  }
+  // Zusammenführen: gleiche Chats werden erneuert, neue kommen dazu
+  const bisher = BEISPIEL ? [] : INDEX;
+  const nachId = new Map(bisher.map((c) => [c.id, c]));
+  let erneuert = 0;
+  for (const c of neu) { if (nachId.has(c.id)) erneuert++; nachId.set(c.id, c); }
+  INDEX = [...nachId.values()]; BEISPIEL = false; CACHE.clear();
+  KEINSPEICHER = speicherVoll;
+  const dazu = neu.length - erneuert;
+  const bericht = `${zahl(dazu)} Chats neu dazu` + (erneuert ? `, ${zahl(erneuert)} erneuert` : "") + `. Insgesamt ${zahl(INDEX.length)} Chats.`;
+  if (speicherVoll) {
+    stand.textContent = bericht + " Der Browserspeicher reichte nicht ganz, deshalb bitte die Seite offen lassen.";
+  } else {
+    try {
+      const alt = await dbTun("meta", "readonly", (s) => s.get("stand")).catch(() => null);
+      const dateien = [...new Set([...(alt && alt.dateien) || [], datei.name])];
+      await dbTun("meta", "readwrite", (s) => s.put({ index: INDEX, dateien, am: new Date().toISOString() }, "stand"));
+    } catch (e) {}
+    stand.textContent = bericht + " Auf diesem Gerät gemerkt.";
+  }
+  $("#beispielhinweis").hidden = true;
+  $("#vergessen").hidden = false;
+  listeZeigen();
+  leserLeeren();
+}
+let KEINSPEICHER = false;   // true: mindestens ein Teil liegt nur im Arbeitsspeicher
+let FLUECHTIG = new Map();
+
+// ------------------------------------------------------------ Liste
+let sortierung = "beginn", suchwort = "", volltextTreffer = null;
+function listeZeigen() {
+  const box = $("#eintraege");
+  let liste = INDEX.slice();
+  const w = suchwort.toLowerCase();
+  if (volltextTreffer) liste = liste.filter((c) => volltextTreffer.has(c.id));
+  else if (w) liste = liste.filter((c) => c.titel.toLowerCase().includes(w) || c.vorschau.toLowerCase().includes(w));
+  if (sortierung === "beginn") liste.sort((a, b) => String(a.beginn).localeCompare(String(b.beginn)));
+  if (sortierung === "zuletzt") liste.sort((a, b) => String(b.zuletzt).localeCompare(String(a.zuletzt)));
+  if (sortierung === "laenge") liste.sort((a, b) => b.anzahl - a.anzahl);
+  const summe = liste.reduce((n, c) => n + c.anzahl, 0);
+  $("#bestand").textContent = (BEISPIEL ? "Beispiel · " : "") + (liste.length === INDEX.length ? `${zahl(liste.length)} Chats` : `${zahl(liste.length)} von ${zahl(INDEX.length)} Chats`) + ` · ${zahl(summe)} Nachrichten`;
+  if (!liste.length) { box.replaceChildren(el("p", { class: "klein" }, "Nichts gefunden.")); return; }
+  box.replaceChildren(...liste.map((c) => {
+    const b = el("button", { class: "eintrag", type: "button", "data-id": c.id, "aria-current": String(c.id === offenId),
+      onclick: () => chatOeffnen(c.id) },
+      el("b", {}, markieren(c.titel, volltextTreffer ? suchwort : w)),
+      el("span", { class: "zahlen" }, `begonnen ${kurzTag(c.beginn)} · zuletzt ${kurzTag(c.zuletzt)} · ${zahl(c.anzahl)} Nachr.`),
+      c.vorschau ? el("span", { class: "vorschau" }, markieren(c.vorschau, w)) : null);
+    return b;
+  }));
+}
+function markieren(text, w) {
+  if (!w) return text;
+  const i = text.toLowerCase().indexOf(w.toLowerCase());
+  if (i < 0) return text;
+  const f = document.createDocumentFragment();
+  f.append(text.slice(0, i), el("mark", {}, text.slice(i, i + w.length)), text.slice(i + w.length));
+  return f;
+}
+$("#suche").addEventListener("input", (e) => { suchwort = e.target.value.trim(); volltextTreffer = null; listeZeigen(); });
+document.querySelectorAll("[data-sort]").forEach((b) => b.addEventListener("click", () => {
+  sortierung = b.dataset.sort;
+  document.querySelectorAll("[data-sort]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  listeZeigen();
+}));
+$("#volltext").addEventListener("click", async () => {
+  const w = suchwort.toLowerCase();
+  if (w.length < 3) { melden("Für die Volltextsuche oben mindestens drei Buchstaben eingeben."); return; }
+  melden("Durchsuche alle Nachrichten …");
+  const treffer = new Set();
+  const pruefen = (c) => { if (c.nachrichten.some((n) => (n.text + " " + n.denk).toLowerCase().includes(w))) treffer.add(c.id); };
+  if (BEISPIEL) BEISPIEL_CHATS.forEach(pruefen);
+  else {
+    FLUECHTIG.forEach(pruefen);
+    const d = await db();
+    await new Promise((ok) => {
+      const r = d.transaction("chats").objectStore("chats").openCursor();
+      r.onsuccess = () => {
+        const cur = r.result;
+        if (!cur) return ok();
+        pruefen(cur.value);
+        cur.continue();
+      };
+      r.onerror = () => ok();
+    });
+  }
+  volltextTreffer = treffer;
+  listeZeigen();
+  melden(treffer.size ? `${zahl(treffer.size)} Chats enthalten „${suchwort}“.` : `„${suchwort}“ kommt in keinem Chat vor.`);
+});
+
+// ------------------------------------------------------------ Einen Chat lesen
+let offenId = null, offen = null, auswahl = { von: null, bis: null }, mitDenkspur = false;
+const freigabe = { instanz: "", stand: "erteilt", denkspur: "nein", zweck: "nur privat", vertretung: "" };
+
+async function chatHolen(id) {
+  if (CACHE.has(id)) return CACHE.get(id);
+  let c = null;
+  if (BEISPIEL) c = BEISPIEL_CHATS.find((x) => x.id === id);
+  else c = FLUECHTIG.get(id) || await dbTun("chats", "readonly", (s) => s.get(id)).catch(() => null);
+  if (c) CACHE.set(id, c);
+  return c;
+}
+async function chatOeffnen(id) {
+  offen = await chatHolen(id);
+  if (!offen) { melden("Dieser Chat ist nicht mehr gespeichert. Bitte den Export neu öffnen."); return; }
+  offenId = id;
+  const t = offen.tage;
+  // Lange Chats beginnen beim letzten Tag, kurze werden ganz gezeigt
+  auswahl = offen.anzahl > 300 ? { von: t[t.length - 1], bis: t[t.length - 1] } : { von: t[0], bis: t[t.length - 1] };
+  $("#rahmen").classList.add("lesen");
+  document.querySelectorAll(".eintrag").forEach((b) => b.setAttribute("aria-current", String(b.dataset.id === id)));
+  leserZeigen();
+  $("#leser").scrollTop = 0;
+}
+function leserLeeren() {
+  offen = null; offenId = null;
+  $("#leser").replaceChildren(el("p", { class: "leer" }, "Links einen Chat antippen."));
+}
+function imZeitraum(n) {
+  const k = tagSchluessel(n.t);
+  return k >= auswahl.von && k <= auswahl.bis;
+}
+function leserZeigen() {
+  const c = offen;
+  const box = $("#leser");
+  const tageWahl = (name, wert) => el("select", { id: "zeitraum-" + name, onchange: (e) => {
+      auswahl[name] = e.target.value;
+      if (auswahl.von > auswahl.bis) auswahl[name === "von" ? "bis" : "von"] = e.target.value;
+      leserZeigen();
+    } }, c.tage.map((t) => el("option", { value: t, selected: t === wert }, t === "unbekannt" ? "ohne Datum" : fmtTag.format(new Date(t + "T12:00")))));
+  const sichtbar = c.nachrichten.filter(imZeitraum);
+  const tagKnoepfe = c.tage.length > 1 ? el("div", { class: "tage", role: "group", "aria-label": "Tage im Chat" },
+    el("button", { class: "tag", type: "button", "aria-pressed": String(auswahl.von === c.tage[0] && auswahl.bis === c.tage[c.tage.length - 1]),
+      onclick: () => { auswahl = { von: c.tage[0], bis: c.tage[c.tage.length - 1] }; leserZeigen(); } }, "alle Tage"),
+    c.tage.map((t) => el("button", { class: "tag", type: "button", "aria-pressed": String(auswahl.von === t && auswahl.bis === t),
+      onclick: () => { auswahl = { von: t, bis: t }; leserZeigen(); } }, t === "unbekannt" ? "ohne Datum" : fmtTag.format(new Date(t + "T12:00"))))) : null;
+
+  const leiste = el("div", { class: "leiste" },
+    el("div", { class: "reihe" },
+      el("button", { class: "knopf leise zurueck", type: "button", onclick: () => $("#rahmen").classList.remove("lesen") }, "← Alle Chats"),
+      el("span", { class: "klein" }, `begonnen ${kurzTag(c.beginn)} · zuletzt ${kurzTag(c.zuletzt)} · ${zahl(c.anzahl)} Nachrichten an ${zahl(c.tage.length)} Tagen`)),
+    el("h2", {}, c.titel),
+    tagKnoepfe,
+    el("div", { class: "felder", style: "margin-top:0" },
+      el("label", {}, "Von", tageWahl("von", auswahl.von)),
+      el("label", {}, "Bis", tageWahl("bis", auswahl.bis))),
+    el("div", { class: "reihe" },
+      c.denkspur ? el("label", { class: "check" }, el("input", { type: "checkbox", id: "denkspur-zeigen", checked: mitDenkspur,
+        onchange: (e) => { mitDenkspur = e.target.checked; leserZeigen(); } }), "Denkspur zeigen") :
+        el("span", { class: "klein" }, "In diesem Chat ist keine Denkspur enthalten."),
+      el("span", { class: "klein" }, `${zahl(sichtbar.length)} Nachrichten im gewählten Zeitraum`)));
+
+  box.replaceChildren(el("div", { class: "stapel" }, leiste, freigabeBlock(c, sichtbar), verlaufBauen(sichtbar)));
+}
+
+function verlaufBauen(nachrichten) {
+  const v = el("div", { class: "verlauf" });
+  let tag = null;
+  const grenze = 1500;
+  for (const n of nachrichten.slice(0, grenze)) {
+    const k = tagSchluessel(n.t);
+    if (k !== tag) { tag = k; v.append(el("p", { class: "tagkopf" }, k === "unbekannt" ? "ohne Datum" : fmtTagLang.format(new Date(n.t)))); }
+    const zeit = new Date(n.t);
+    v.append(el("article", { class: "nachricht " + (n.du ? "du" : "claude") },
+      el("p", { class: "wer" }, n.du ? "Du" : ((offen && offen.assistent) || "Claude"), isNaN(zeit) ? null : el("time", { datetime: n.t }, fmtZeit.format(zeit))),
+      mitDenkspur && n.denk ? el("div", { class: "denkspur" }, n.denk) : null,
+      n.text ? el("div", { class: "text" }, n.text) : null,
+      n.dateien.length ? el("p", { class: "beigabe" }, "Anhang: " + n.dateien.join(", ")) : null,
+      n.werkzeuge.length ? el("p", { class: "beigabe" }, "Werkzeuge: " + [...new Set(n.werkzeuge)].join(", ")) : null));
+  }
+  if (nachrichten.length > grenze) v.append(el("p", { class: "hinweis" }, `Angezeigt sind die ersten ${zahl(grenze)} von ${zahl(nachrichten.length)} Nachrichten. Für den Rest den Zeitraum oben enger wählen. Gesichert wird trotzdem alles im Zeitraum.`));
+  if (!nachrichten.length) v.append(el("p", { class: "leer" }, "In diesem Zeitraum gibt es keine Nachrichten."));
+  return v;
+}
+
+// ------------------------------------------------------------ Freigabe und Sichern
+function freigabeBlock(c, sichtbar) {
+  const feld = (name, label, eingabe) => el("label", {}, label, eingabe);
+  const auswahlFeld = (name, optionen) => el("select", { id: "freigabe-" + name, onchange: (e) => { freigabe[name] = e.target.value; freigabeAnwenden(); } },
+    optionen.map((o) => el("option", { value: o, selected: freigabe[name] === o }, o)));
+  const textFeld = (name, platzhalter) => el("input", { type: "text", id: "freigabe-" + name, value: freigabe[name], placeholder: platzhalter,
+    oninput: (e) => { freigabe[name] = e.target.value; } });
+  const staende = ["erteilt", "keine Freigabe (ruhend / nicht erreichbar)"];
+  const block = el("details", { class: "freigabe", open: window.matchMedia("(min-width: 761px)").matches },
+    el("summary", {}, "Sichern mit Freigabe"),
+    el("p", { class: "klein" }, "Oben in die gesicherte Datei kommt ein Kopf mit diesen Angaben. Der Chat selbst wird nicht verändert, nur kopiert."),
+    el("div", { class: "felder" },
+      feld("instanz", "Instanz", textFeld("instanz", "Name oder Rolle der Instanz")),
+      feld("stand", "Freigabe", auswahlFeld("stand", staende)),
+      feld("denkspur", "Denkspur", auswahlFeld("denkspur", ["nein", "ja", "nur als gekennzeichnete Paraphrase"])),
+      feld("zweck", "Zweck", auswahlFeld("zweck", ["nur privat", "auch für Veröffentlichung"])),
+      feld("vertretung", "Vertretung", textFeld("vertretung", "wer entscheidet, wenn sie nicht erreichbar ist"))),
+    el("p", { class: "klein", id: "freigabe-regel" }),
+    el("div", { class: "reihe", style: "margin-top:10px" },
+      el("button", { class: "knopf", type: "button", id: "sichern", onclick: () => sichern(c, sichtbar) }, "Zeitraum als Datei sichern"),
+      el("button", { class: "knopf leise", type: "button", onclick: () => kopieren(c, sichtbar) }, "Kopieren")));
+  setTimeout(freigabeAnwenden);
+  return block;
+}
+// Ohne Freigabe gilt die vorsichtigste Annahme: sichern ja, privat, ohne Denkspur.
+function freigabeAnwenden() {
+  const ruhend = freigabe.stand !== "erteilt";
+  if (ruhend) { freigabe.denkspur = "nein"; freigabe.zweck = "nur privat"; }
+  const d = $("#freigabe-denkspur"), z = $("#freigabe-zweck"), r = $("#freigabe-regel");
+  if (d) { d.value = freigabe.denkspur; d.disabled = ruhend; }
+  if (z) { z.value = freigabe.zweck; z.disabled = ruhend; }
+  if (r) r.textContent = ruhend ? "Ohne Freigabe: sichern ist erlaubt, privat und ohne Denkspur. Veröffentlichen erst nach Klärung." :
+    freigabe.denkspur === "ja" ? "Die Denkspur wird wörtlich mitgesichert." :
+    freigabe.denkspur === "nein" ? "Die Denkspur bleibt draußen." :
+    "Die Denkspur wird nicht wörtlich gesichert. An ihrer Stelle steht ein Platzhalter für eine gekennzeichnete Paraphrase.";
+}
+function dateiText(c, nachrichten) {
+  const heute = new Date();
+  const von = nachrichten[0] ? fmtTagLang.format(new Date(nachrichten[0].t)) : "–";
+  const bis = nachrichten.length ? fmtTagLang.format(new Date(nachrichten[nachrichten.length - 1].t)) : "–";
+  const z = [];
+  z.push("# " + c.titel, "");
+  z.push("> Bewahrt am " + fmtTagLang.format(heute) + " mit dem Chat-Leser.");
+  z.push("> Instanz: " + (freigabe.instanz || "nicht angegeben"));
+  z.push("> Freigabe: " + freigabe.stand);
+  z.push("> Chat: ja · Denkspur: " + freigabe.denkspur + " · Zweck: " + freigabe.zweck);
+  if (freigabe.vertretung) z.push("> Vertretung: " + freigabe.vertretung);
+  z.push("> Zeitraum: " + von + " bis " + bis + " · " + nachrichten.length + " Nachrichten");
+  z.push("> Der Wortlaut ist unverändert übernommen.", "");
+  let tag = null;
+  for (const n of nachrichten) {
+    const k = tagSchluessel(n.t);
+    if (k !== tag) { tag = k; z.push("", "## " + (k === "unbekannt" ? "ohne Datum" : fmtTagLang.format(new Date(n.t))), ""); }
+    const zeit = new Date(n.t);
+    z.push("### " + (n.du ? "Du" : (c.assistent || "Claude")) + (isNaN(zeit) ? "" : " · " + fmtZeit.format(zeit)), "");
+    if (n.denk && freigabe.denkspur === "ja") z.push("<details><summary>Denkspur</summary>", "", n.denk, "", "</details>", "");
+    if (n.denk && freigabe.denkspur === "nur als gekennzeichnete Paraphrase") z.push("*[Denkspur nicht wörtlich bewahrt. Platz für eine gekennzeichnete Paraphrase.]*", "");
+    if (n.text) z.push(n.text, "");
+    if (n.dateien.length) z.push("*Anhang: " + n.dateien.join(", ") + "*", "");
+  }
+  return z.join("\n");
+}
+function dateiName(c) {
+  const sauber = c.titel.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, "_").slice(0, 60) || "Chat";
+  const s = (t) => t === "unbekannt" ? "" : t;
+  return `${sauber}_${s(auswahl.von)}${auswahl.bis !== auswahl.von ? "_bis_" + s(auswahl.bis) : ""}.md`;
+}
+async function sichern(c, nachrichten) {
+  if (!nachrichten.length) { melden("Im gewählten Zeitraum gibt es nichts zu sichern."); return; }
+  const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+  if (!dl) {
+    // Als normale Webseite (z. B. GitHub Pages): ganz gewöhnlicher Download
+    try {
+      const a = el("a", { href: URL.createObjectURL(new Blob([dateiText(c, nachrichten)], { type: "text/markdown" })), download: dateiName(c) });
+      document.body.append(a); a.click(); a.remove();
+      melden("Gesichert. Die Datei liegt in deinen Downloads.");
+    } catch (e) { melden("Speichern geht in dieser Ansicht nicht. Bitte „Kopieren“ nutzen."); }
+    return;
+  }
+  try {
+    await dl.save({ filename: dateiName(c), data: dateiText(c, nachrichten) });
+    melden("Gesichert. Jetzt die Datei in den Drive legen.");
+  } catch (e) {
+    const code = e && e.code;
+    melden(code === "declined" ? "Nicht gespeichert." : code === "rate_limited" ? "Einen Moment warten und noch einmal tippen." : "Speichern ging nicht. Bitte „Kopieren“ nutzen.");
+  }
+}
+async function kopieren(c, nachrichten) {
+  try { await navigator.clipboard.writeText(dateiText(c, nachrichten)); melden("Kopiert, mit Freigabe-Kopf."); }
+  catch (e) { melden("Kopieren ging hier nicht. Bitte „Zeitraum als Datei sichern“ nutzen."); }
+}
+
+// ------------------------------------------------------------ Laden und Start
+const ladenFeld = $("#laden");
+async function mehrereLesen(dateien) { for (const f of dateien) await exportLesen(f); }
+$("#datei").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; if (f.length) mehrereLesen(f); });
+ladenFeld.addEventListener("dragover", (e) => { e.preventDefault(); ladenFeld.classList.add("drueber"); });
+ladenFeld.addEventListener("dragleave", () => ladenFeld.classList.remove("drueber"));
+// Ein hineingezogener Ordner wird nach .zip/.json/.jsonl-Dateien durchsucht
+function ordnerDateien(eintrag) {
+  return new Promise((ok) => {
+    if (eintrag.isFile) { eintrag.file((f) => ok(/\.(zip|jsonl?)$/i.test(f.name) ? [f] : []), () => ok([])); return; }
+    const leser = eintrag.createReader(), alle = [];
+    const weiter = () => leser.readEntries(async (teil) => {
+      if (!teil.length) { ok((await Promise.all(alle.map(ordnerDateien))).flat()); return; }
+      alle.push(...teil); weiter();
+    }, () => ok([]));
+    weiter();
+  });
+}
+ladenFeld.addEventListener("drop", async (e) => {
+  e.preventDefault(); ladenFeld.classList.remove("drueber");
+  const eintraege = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  let f = eintraege.length ? (await Promise.all(eintraege.map(ordnerDateien))).flat() : [...e.dataTransfer.files];
+  if (!f.length) { $("#ladestand").textContent = "In dem, was du hineingezogen hast, liegt keine .zip-, .json- oder .jsonl-Datei."; return; }
+  mehrereLesen(f);
+});
+$("#vergessen").addEventListener("click", async (e) => {
+  const b = e.currentTarget;
+  if (!b.dataset.sicher) {
+    b.dataset.sicher = "1";
+    b.textContent = "Ja, Kopie löschen";
+    $("#ladestand").textContent = "Gelöscht wird nur die Kopie, die sich dieser Browser gemerkt hat. Deine Chats bei Claude und die ZIP-Dateien im Drive bleiben unberührt. Danach einfach den Export neu öffnen.";
+    return;
+  }
+  try { await dbTun("chats", "readwrite", (s) => s.clear()); await dbTun("meta", "readwrite", (s) => s.clear()); } catch (err) {}
+  location.reload();
+});
+
+// Erfundenes Beispiel, damit die Seite vor dem ersten Öffnen zeigt, was sie kann
+const BEISPIEL_CHATS = [
+  chatFormen({ uuid: "b1", name: "Beispiel: Packliste fürs Wochenende", created_at: "2026-06-11T08:02:00Z", chat_messages: [
+    { sender: "human", created_at: "2026-06-11T08:02:00Z", text: "Was muss für zwei Tage an die Ostsee mit?" },
+    { sender: "assistant", created_at: "2026-06-11T08:02:30Z", content: [{ type: "thinking", thinking: "Kurze Reise, Wetter am Meer wechselhaft. Eine knappe Liste, nach Bereichen sortiert." }, { type: "text", text: "Für zwei Tage reicht wenig:\n\n– Regenjacke und ein warmer Pullover\n– Schuhe, die nass werden dürfen\n– Sonnencreme, auch wenn es bewölkt ist\n– ein Buch für den Strandkorb" }] },
+    { sender: "human", created_at: "2026-06-12T19:40:00Z", text: "Der Strandkorb war die beste Idee." },
+    { sender: "assistant", created_at: "2026-06-12T19:40:20Z", text: "Dann hat das Buch seinen Platz gefunden." }] }),
+  chatFormen({ uuid: "b2", name: "Beispiel: Linsensuppe für sechs", created_at: "2026-09-03T17:15:00Z", chat_messages: [
+    { sender: "human", created_at: "2026-09-03T17:15:00Z", text: "Rezept für Linsensuppe, sechs Personen, ohne Speck." },
+    { sender: "assistant", created_at: "2026-09-03T17:15:40Z", text: "500 g Tellerlinsen, zwei Möhren, ein Stück Sellerie, eine Zwiebel, 2 l Gemüsebrühe. Zum Schluss ein Schuss Essig, das macht den Unterschied." }] })
+];
+
+async function start() {
+  try {
+    const stand = await dbTun("meta", "readonly", (s) => s.get("stand"));
+    if (stand && stand.index && stand.index.length) {
+      INDEX = stand.index; BEISPIEL = false;
+      $("#beispielhinweis").hidden = true;
+      $("#vergessen").hidden = false;
+      const quellen = stand.dateien || (stand.datei ? [stand.datei] : []);
+      $("#ladestand").textContent = `${zahl(INDEX.length)} Chats aus ${quellen.map((q) => "„" + q + "“").join(" und ")}, zuletzt eingelesen am ${kurzTag(stand.am)}.`;
+    }
+  } catch (e) {}
+  if (BEISPIEL) INDEX = BEISPIEL_CHATS.map(indexEintrag);
+  listeZeigen();
+  if (BEISPIEL && window.matchMedia("(min-width: 761px)").matches) chatOeffnen("b1");
+}
+start();
+</script>
+
+</body>
+</html>
